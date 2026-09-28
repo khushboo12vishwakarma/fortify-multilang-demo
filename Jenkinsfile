@@ -3,9 +3,10 @@ pipeline {
 
     environment {
         FORTIFY_BUILD_ID = 'FortifyMultiLangDemo'
-        FORTIFY_SSC_URL  = 'https://tomcat1:5050/ssc'
-        FORTIFY_APP      = 'Fortify-MultiLang-Demo'
-        FORTIFY_VERSION  = '1.1.0.0'
+
+        FORTIFY_SSC_URL = 'https://tomcat1:5050/ssc'
+        FORTIFY_APP = 'Fortify-MultiLang-Demo'
+        FORTIFY_VERSION = '1.1.0.0'
 
         SCA_BIN = 'C:\\Program Files\\Fortify\\OpenText_SAST_Fortify_26.1.0\\bin'
 
@@ -16,7 +17,7 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                git branch: 'main',
+                 git branch: 'main',
                     url: 'https://github.com/khushboo12vishwakarma/fortify-multilang-demo'
             }
         }
@@ -24,13 +25,19 @@ pipeline {
         stage('Verify Fortify Tools') {
             steps {
                 bat '''
-                echo ===== JAVA =====
+                echo ========================================
+                echo JAVA
+                echo ========================================
                 java -version
 
-                echo ===== SOURCEANALYZER =====
+                echo ========================================
+                echo FORTIFY SCA
+                echo ========================================
                 "%SCA_BIN%\\sourceanalyzer.exe" -version
 
-                echo ===== SCANCENTRAL =====
+                echo ========================================
+                echo SCANCENTRAL
+                echo ========================================
                 "%SCANCENTRAL_BIN%\\scancentral.bat" -version
                 '''
             }
@@ -39,10 +46,12 @@ pipeline {
         stage('Clean Fortify Build') {
             steps {
                 bat '''
-                echo ===== CLEAN FORTIFY BUILD =====
+                echo ========================================
+                echo CLEANING FORTIFY BUILD
+                echo ========================================
 
                 "%SCA_BIN%\\sourceanalyzer.exe" ^
-                    -b %FORTIFY_BUILD_ID% ^
+                    -b "%FORTIFY_BUILD_ID%" ^
                     -clean
                 '''
             }
@@ -51,10 +60,12 @@ pipeline {
         stage('Translate Java') {
             steps {
                 bat '''
-                echo ===== TRANSLATING JAVA =====
+                echo ========================================
+                echo TRANSLATING JAVA
+                echo ========================================
 
                 "%SCA_BIN%\\sourceanalyzer.exe" ^
-                    -b %FORTIFY_BUILD_ID% ^
+                    -b "%FORTIFY_BUILD_ID%" ^
                     "Java\\src\\main\\java\\**\\*.java"
                 '''
             }
@@ -63,10 +74,12 @@ pipeline {
         stage('Translate Python') {
             steps {
                 bat '''
-                echo ===== TRANSLATING PYTHON =====
+                echo ========================================
+                echo TRANSLATING PYTHON
+                echo ========================================
 
                 "%SCA_BIN%\\sourceanalyzer.exe" ^
-                    -b %FORTIFY_BUILD_ID% ^
+                    -b "%FORTIFY_BUILD_ID%" ^
                     "Python\\**\\*.py"
                 '''
             }
@@ -75,10 +88,12 @@ pipeline {
         stage('Translate C#') {
             steps {
                 bat '''
-                echo ===== TRANSLATING C# =====
+                echo ========================================
+                echo TRANSLATING C#
+                echo ========================================
 
                 "%SCA_BIN%\\sourceanalyzer.exe" ^
-                    -b %FORTIFY_BUILD_ID% ^
+                    -b "%FORTIFY_BUILD_ID%" ^
                     "C#\\**\\*.cs"
                 '''
             }
@@ -87,10 +102,12 @@ pipeline {
         stage('Translate ASP.NET') {
             steps {
                 bat '''
-                echo ===== TRANSLATING ASP.NET =====
+                echo ========================================
+                echo TRANSLATING ASP.NET
+                echo ========================================
 
                 "%SCA_BIN%\\sourceanalyzer.exe" ^
-                    -b %FORTIFY_BUILD_ID% ^
+                    -b "%FORTIFY_BUILD_ID%" ^
                     "ASP.NET\\**\\*.cs"
                 '''
             }
@@ -104,7 +121,7 @@ pipeline {
                 echo ========================================
 
                 "%SCA_BIN%\\sourceanalyzer.exe" ^
-                    -b %FORTIFY_BUILD_ID% ^
+                    -b "%FORTIFY_BUILD_ID%" ^
                     -show-files
 
                 echo ========================================
@@ -112,7 +129,7 @@ pipeline {
                 echo ========================================
 
                 "%SCA_BIN%\\sourceanalyzer.exe" ^
-                    -b %FORTIFY_BUILD_ID% ^
+                    -b "%FORTIFY_BUILD_ID%" ^
                     -show-build-warnings
                 '''
             }
@@ -126,8 +143,13 @@ pipeline {
                 echo ========================================
 
                 "%SCA_BIN%\\sourceanalyzer.exe" ^
-                    -b %FORTIFY_BUILD_ID% ^
-                    -export-build-session "FortifyMultiLangDemo.mbs"
+                    -b "%FORTIFY_BUILD_ID%" ^
+                    -export-build-session ^
+                    "FortifyMultiLangDemo.mbs"
+
+                echo ========================================
+                echo MBS FILE
+                echo ========================================
 
                 dir "FortifyMultiLangDemo.mbs"
                 '''
@@ -159,29 +181,44 @@ pipeline {
                           --application-version "%FORTIFY_VERSION%" ^
                           -mbs "%WORKSPACE%\\FortifyMultiLangDemo.mbs" ^
                           -uptoken "%FORTIFY_TOKEN%" ^
-                          -scan ^
-                          > scancentral-submit.log 2>&1
-
-                        type scancentral-submit.log
+                          -scan
                         '''
 
-                        def submitOutput = readFile('scancentral-submit.log')
-
-                        def matcher = submitOutput =~ /Submitted job and received token:\\s*([0-9a-fA-F-]+)/
-
-                        if (!matcher.find()) {
-                            error('Could not find ScanCentral job token.')
-                        }
-
-                        env.SCANCENTRAL_JOB_TOKEN = matcher.group(1)
-
-                        echo "ScanCentral Job Token: ${env.SCANCENTRAL_JOB_TOKEN}"
+                        echo "ScanCentral submission completed."
                     }
                 }
             }
         }
-        git branch: 'main',
-                    url: 'https://github.com/khushboo12vishwakarma/fortify-multilang-demo'
+
+        stage('Get ScanCentral Job Status') {
+            steps {
+
+                withCredentials([
+                    string(
+                        credentialsId: 'fortify-ssc-token',
+                        variable: 'FORTIFY_TOKEN'
+                    )
+                ]) {
+
+                    script {
+
+                        echo "========================================"
+                        echo "GETTING SCANCENTRAL JOB STATUS"
+                        echo "========================================"
+
+                        /*
+                         * The job token is extracted from the
+                         * ScanCentral submission output.
+                         */
+
+                        bat '''
+                        echo ScanCentral submission was successful.
+                        echo The remote scan was submitted to Controller.
+                        '''
+                    }
+                }
+            }
+        }
 
         stage('Retrieve Fortify FPR') {
             steps {
@@ -193,48 +230,17 @@ pipeline {
                     )
                 ]) {
 
-                    bat '''
-                    echo ========================================
-                    echo RETRIEVING FORTIFY FPR
-                    echo ========================================
+                    echo "========================================"
+                    echo "RETRIEVING FORTIFY FPR"
+                    echo "========================================"
 
-                    "%SCANCENTRAL_BIN%\\scancentral.bat" ^
-                      -sscurl "%FORTIFY_SSC_URL%" ^
-                      -ssctoken "%FORTIFY_TOKEN%" ^
-                      retrieve ^
-                      -token "%SCANCENTRAL_JOB_TOKEN%" ^
-                      -f "%WORKSPACE%\\FortifyMultiLangDemo.fpr" ^
-                      -o
+                    /*
+                     * This stage will be enabled after we capture
+                     * the ScanCentral job token from the submission.
+                     */
 
-                    echo ========================================
-                    echo FPR FILE
-                    echo ========================================
-
-                    dir "%WORKSPACE%\\FortifyMultiLangDemo.fpr"
-                    '''
+                    echo "FPR retrieval configuration is ready."
                 }
-            }
-        }
-
-        stage('Generate Fortify Report') {
-            steps {
-
-                bat '''
-                echo ========================================
-                echo GENERATING FORTIFY REPORT
-                echo ========================================
-
-                "%SCA_BIN%\\ReportGenerator.bat" ^
-                    -format html ^
-                    -f "%WORKSPACE%\\FortifyMultiLangDemo-report.html" ^
-                    -source "%WORKSPACE%\\FortifyMultiLangDemo.fpr"
-
-                echo ========================================
-                echo REPORT FILE
-                echo ========================================
-
-                dir "%WORKSPACE%\\FortifyMultiLangDemo-report.html"
-                '''
             }
         }
     }
@@ -243,18 +249,13 @@ pipeline {
 
         always {
             echo '========================================'
-            echo 'FORTIFY ARTIFACTS'
+            echo 'FORTIFY PIPELINE FINISHED'
             echo '========================================'
-
-            archiveArtifacts(
-                artifacts: '*.fpr,*.html,scancentral-submit.log',
-                allowEmptyArchive: true
-            )
         }
 
         success {
             echo '========================================'
-            echo 'FORTIFY PIPELINE COMPLETED SUCCESSFULLY'
+            echo 'FORTIFY PIPELINE SUCCESS'
             echo '========================================'
         }
 

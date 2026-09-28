@@ -278,31 +278,62 @@ pipeline {
         }
 
         stage('Generate Fortify Report') {
-            steps {
+    steps {
+        echo '========================================'
+        echo 'GENERATING FORTIFY HTML REPORT'
+        echo '========================================'
 
-                bat '''
-                echo ========================================
-                echo GENERATING FORTIFY REPORT
-                echo ========================================
+        bat '''
+            set "REPORT_GENERATOR=C:\\Program Files\\Fortify\\OpenText_Application_Security_Tools_25.4.0\\bin\\ReportGenerator.bat"
+            set "FPR_FILE=%WORKSPACE%\\FortifyMultiLangDemo.fpr"
+            set "REPORT_FILE=%WORKSPACE%\\FortifyMultiLangDemo-report.html"
 
-                "%SCA_BIN%\\ReportGenerator.bat" ^
-                    -format html ^
-                    -f "%WORKSPACE%\\FortifyMultiLangDemo-report.html" ^
-                    -source "%WORKSPACE%\\FortifyMultiLangDemo.fpr"
+            echo Report Generator:
+            echo %REPORT_GENERATOR%
 
-                if errorlevel 1 (
-                    echo Failed to generate Fortify report.
-                    exit /b 1
-                )
+            echo.
+            echo FPR:
+            echo %FPR_FILE%
 
-                echo ========================================
-                echo FORTIFY REPORT CREATED
-                echo ========================================
+            echo.
+            echo Checking files...
 
-                dir "%WORKSPACE%\\FortifyMultiLangDemo-report.html"
-                '''
-            }
-        }
+            if not exist "%REPORT_GENERATOR%" (
+                echo ERROR: ReportGenerator.bat was not found.
+                exit /b 1
+            )
+
+            if not exist "%FPR_FILE%" (
+                echo ERROR: Fortify FPR was not found.
+                exit /b 1
+            )
+
+            echo.
+            echo Generating HTML report...
+
+            call "%REPORT_GENERATOR%" ^
+                -format html ^
+                -f "%REPORT_FILE%" ^
+                -source "%FPR_FILE%"
+
+            if errorlevel 1 (
+                echo ERROR: Failed to generate Fortify HTML report.
+                exit /b 1
+            )
+
+            if not exist "%REPORT_FILE%" (
+                echo ERROR: HTML report was not created.
+                exit /b 1
+            )
+
+            echo.
+            echo ========================================
+            echo FORTIFY HTML REPORT CREATED
+            echo ========================================
+            dir "%REPORT_FILE%"
+        '''
+    }
+}
     }
 
     post {

@@ -286,7 +286,7 @@ pipeline {
         bat '''
             set "REPORT_GENERATOR=C:\\Program Files\\Fortify\\OpenText_Application_Security_Tools_25.4.0\\bin\\ReportGenerator.bat"
             set "FPR_FILE=%WORKSPACE%\\FortifyMultiLangDemo.fpr"
-            set "REPORT_FILE=%WORKSPACE%\\FortifyMultiLangDemo-report.html"
+            set "REPORT_FILE=%WORKSPACE%\\FortifyMultiLangDemo-report.pdf"
 
             echo Report Generator:
             echo %REPORT_GENERATOR%

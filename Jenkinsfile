@@ -180,33 +180,39 @@ pipeline {
             }
         }
 
-        stage('Wait For Scan Completion') {
-            steps {
+        stage('Submit ScanCentral Scan') {
+    steps {
+        withCredentials([
+            string(
+                credentialsId: 'fortify-ssc-token',
+                variable: 'FORTIFY_TOKEN'
+            )
+        ]) {
+            bat '''
+            echo ========================================
+            echo SUBMITTING SCANCENTRAL SCAN
+            echo ========================================
 
-                withCredentials([
-                    string(
-                        credentialsId: 'fortify-ssc-token',
-                        variable: 'FORTIFY_TOKEN'
-                    )
-                ]) {
+            "%SCANCENTRAL_BIN%\\scancentral.bat" ^
+              -sscurl "%FORTIFY_SSC_URL%" ^
+              -ssctoken "%FORTIFY_TOKEN%" ^
+              start -upload ^
+              --application "%FORTIFY_APP%" ^
+              --application-version "%FORTIFY_VERSION%" ^
+              -mbs "%WORKSPACE%\\FortifyMultiLangDemo.mbs" ^
+              -uptoken "%FORTIFY_TOKEN%" ^
+              -scan
 
-                    bat '''
-                    echo ========================================
-                    echo WAITING FOR SCANCENTRAL SCAN
-                    echo ========================================
-
-                    "%SCANCENTRAL_BIN%\\scancentral.bat" ^
-                      -sscurl "%FORTIFY_SSC_URL%" ^
-                      -ssctoken "%FORTIFY_TOKEN%" ^
-                      status ^
-                      -token "%SCANCENTRAL_JOB_TOKEN%" ^
-                      -block-until scan ^
-                      -bto 60 ^
-                      -pi 30
-                    '''
-                }
-            }
+            if errorlevel 1 (
+                echo ========================================
+                echo SCANCENTRAL SUBMISSION FAILED
+                echo ========================================
+                exit /b 1
+            )
+            '''
         }
+    }
+}
 
         stage('Retrieve Fortify FPR') {
             steps {

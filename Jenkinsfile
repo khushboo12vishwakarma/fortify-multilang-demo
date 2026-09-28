@@ -17,7 +17,7 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                 git branch: 'main',
+               git branch: 'main',
                     url: 'https://github.com/khushboo12vishwakarma/fortify-multilang-demo'
             }
         }
@@ -147,10 +147,6 @@ pipeline {
                     -export-build-session ^
                     "FortifyMultiLangDemo.mbs"
 
-                echo ========================================
-                echo MBS FILE
-                echo ========================================
-
                 dir "FortifyMultiLangDemo.mbs"
                 '''
             }
@@ -181,16 +177,36 @@ pipeline {
                           --application-version "%FORTIFY_VERSION%" ^
                           -mbs "%WORKSPACE%\\FortifyMultiLangDemo.mbs" ^
                           -uptoken "%FORTIFY_TOKEN%" ^
-                          -scan
+                          -scan ^
+                          > scancentral-submit.log 2>&1
+
+                        type scancentral-submit.log
                         '''
 
-                        echo "ScanCentral submission completed."
+                        def output = readFile(
+                            file: 'scancentral-submit.log'
+                        )
+
+                        def matcher = output =~ /Submitted job and received token:\s*([0-9a-fA-F-]+)/
+
+                        if (!matcher.find()) {
+                            error(
+                                'ScanCentral job token was not found.'
+                            )
+                        }
+
+                        env.SCANCENTRAL_JOB_TOKEN = matcher.group(1)
+
+                        echo '========================================'
+                        echo 'SCANCENTRAL JOB CREATED'
+                        echo '========================================'
+                        echo "Job token captured successfully."
                     }
                 }
             }
         }
 
-        stage('Get ScanCentral Job Status') {
+        stage('Wait For Scan Completion') {
             steps {
 
                 withCredentials([
@@ -200,22 +216,25 @@ pipeline {
                     )
                 ]) {
 
-                    script {
+                    bat '''
+                    echo ========================================
+                    echo WAITING FOR SCANCENTRAL SCAN
+                    echo ========================================
 
-                        echo "========================================"
-                        echo "GETTING SCANCENTRAL JOB STATUS"
-                        echo "========================================"
+                    "%SCANCENTRAL_BIN%\\scancentral.bat" ^
+                      -sscurl "%FORTIFY_SSC_URL%" ^
+                      -ssctoken "%FORTIFY_TOKEN%" ^
+                      status ^
+                      -token "%SCANCENTRAL_JOB_TOKEN%" ^
+                      -block-until scan ^
+                      -bto 60 ^
+                      -pi 30
 
-                        /*
-                         * The job token is extracted from the
-                         * ScanCentral submission output.
-                         */
-
-                        bat '''
-                        echo ScanCentral submission was successful.
-                        echo The remote scan was submitted to Controller.
-                        '''
-                    }
+                    if errorlevel 1 (
+                        echo ScanCentral scan did not complete successfully.
+                        exit /b 1
+                    )
+                    '''
                 }
             }
         }
@@ -230,17 +249,58 @@ pipeline {
                     )
                 ]) {
 
-                    echo "========================================"
-                    echo "RETRIEVING FORTIFY FPR"
-                    echo "========================================"
+                    bat '''
+                    echo ========================================
+                    echo RETRIEVING FORTIFY FPR
+                    echo ========================================
 
-                    /*
-                     * This stage will be enabled after we capture
-                     * the ScanCentral job token from the submission.
-                     */
+                    "%SCANCENTRAL_BIN%\\scancentral.bat" ^
+                      -sscurl "%FORTIFY_SSC_URL%" ^
+                      -ssctoken "%FORTIFY_TOKEN%" ^
+                      retrieve ^
+                      -token "%SCANCENTRAL_JOB_TOKEN%" ^
+                      -f "%WORKSPACE%\\FortifyMultiLangDemo.fpr" ^
+                      -o
 
-                    echo "FPR retrieval configuration is ready."
+                    if errorlevel 1 (
+                        echo Failed to retrieve FPR.
+                        exit /b 1
+                    )
+
+                    echo ========================================
+                    echo FPR CREATED
+                    echo ========================================
+
+                    dir "%WORKSPACE%\\FortifyMultiLangDemo.fpr"
+                    '''
                 }
+            }
+        }
+
+        stage('Generate Fortify Report') {
+            steps {
+
+                bat '''
+                echo ========================================
+                echo GENERATING FORTIFY REPORT
+                echo ========================================
+
+                "%SCA_BIN%\\ReportGenerator.bat" ^
+                    -format html ^
+                    -f "%WORKSPACE%\\FortifyMultiLangDemo-report.html" ^
+                    -source "%WORKSPACE%\\FortifyMultiLangDemo.fpr"
+
+                if errorlevel 1 (
+                    echo Failed to generate Fortify report.
+                    exit /b 1
+                )
+
+                echo ========================================
+                echo FORTIFY REPORT CREATED
+                echo ========================================
+
+                dir "%WORKSPACE%\\FortifyMultiLangDemo-report.html"
+                '''
             }
         }
     }
@@ -249,13 +309,18 @@ pipeline {
 
         always {
             echo '========================================'
-            echo 'FORTIFY PIPELINE FINISHED'
+            echo 'ARCHIVING FORTIFY RESULTS'
             echo '========================================'
+
+            archiveArtifacts(
+                artifacts: '*.fpr,*.html,scancentral-submit.log',
+                allowEmptyArchive: true
+            )
         }
 
         success {
             echo '========================================'
-            echo 'FORTIFY PIPELINE SUCCESS'
+            echo 'FORTIFY PIPELINE COMPLETED'
             echo '========================================'
         }
 

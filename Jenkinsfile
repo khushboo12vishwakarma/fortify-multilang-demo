@@ -16,7 +16,8 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                checkout scm
+                git branch: 'main',
+                    url: 'https://github.com/khushboo12vishwakarma/fortify-multilang-demo'
             }
         }
 

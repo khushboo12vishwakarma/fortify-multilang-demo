@@ -180,40 +180,8 @@ pipeline {
                 }
             }
         }
-
-        stage('Submit ScanCentral Scan') {
-    steps {
-        withCredentials([
-            string(
-                credentialsId: 'fortify-ssc-token',
-                variable: 'FORTIFY_TOKEN'
-            )
-        ]) {
-            bat '''
-            echo ========================================
-            echo SUBMITTING SCANCENTRAL SCAN
-            echo ========================================
-
-            "%SCANCENTRAL_BIN%\\scancentral.bat" ^
-              -sscurl "%FORTIFY_SSC_URL%" ^
-              -ssctoken "%FORTIFY_TOKEN%" ^
-              start -upload ^
-              --application "%FORTIFY_APP%" ^
-              --application-version "%FORTIFY_VERSION%" ^
-              -mbs "%WORKSPACE%\\FortifyMultiLangDemo.mbs" ^
-              -uptoken "%FORTIFY_TOKEN%" ^
-              -scan
-
-            if errorlevel 1 (
-                echo ========================================
-                echo SCANCENTRAL SUBMISSION FAILED
-                echo ========================================
-                exit /b 1
-            )
-            '''
-        }
-    }
-}
+        git branch: 'main',
+                    url: 'https://github.com/khushboo12vishwakarma/fortify-multilang-demo'
 
         stage('Retrieve Fortify FPR') {
             steps {

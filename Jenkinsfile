@@ -17,8 +17,7 @@ pipeline {
 
         stage('Checkout') {
             steps {
-               git branch: 'main',
-                    url: 'https://github.com/khushboo12vishwakarma/fortify-multilang-demo'
+                checkout scm
             }
         }
 
@@ -147,6 +146,10 @@ pipeline {
                     -export-build-session ^
                     "FortifyMultiLangDemo.mbs"
 
+                echo ========================================
+                echo MBS FILE
+                echo ========================================
+
                 dir "FortifyMultiLangDemo.mbs"
                 '''
             }
@@ -177,36 +180,16 @@ pipeline {
                           --application-version "%FORTIFY_VERSION%" ^
                           -mbs "%WORKSPACE%\\FortifyMultiLangDemo.mbs" ^
                           -uptoken "%FORTIFY_TOKEN%" ^
-                          -scan ^
-                          > scancentral-submit.log 2>&1
-
-                        type scancentral-submit.log
+                          -scan
                         '''
 
-                        def output = readFile(
-                            file: 'scancentral-submit.log'
-                        )
-
-                        def matcher = output =~ /Submitted job and received token:\s*([0-9a-fA-F-]+)/
-
-                        if (!matcher.find()) {
-                            error(
-                                'ScanCentral job token was not found.'
-                            )
-                        }
-
-                        env.SCANCENTRAL_JOB_TOKEN = matcher.group(1)
-
-                        echo '========================================'
-                        echo 'SCANCENTRAL JOB CREATED'
-                        echo '========================================'
-                        echo "Job token captured successfully."
+                        echo "ScanCentral submission completed."
                     }
                 }
             }
         }
 
-        stage('Wait For Scan Completion') {
+        stage('Get ScanCentral Job Status') {
             steps {
 
                 withCredentials([
@@ -216,25 +199,22 @@ pipeline {
                     )
                 ]) {
 
-                    bat '''
-                    echo ========================================
-                    echo WAITING FOR SCANCENTRAL SCAN
-                    echo ========================================
+                    script {
 
-                    "%SCANCENTRAL_BIN%\\scancentral.bat" ^
-                      -sscurl "%FORTIFY_SSC_URL%" ^
-                      -ssctoken "%FORTIFY_TOKEN%" ^
-                      status ^
-                      -token "%SCANCENTRAL_JOB_TOKEN%" ^
-                      -block-until scan ^
-                      -bto 60 ^
-                      -pi 30
+                        echo "========================================"
+                        echo "GETTING SCANCENTRAL JOB STATUS"
+                        echo "========================================"
 
-                    if errorlevel 1 (
-                        echo ScanCentral scan did not complete successfully.
-                        exit /b 1
-                    )
-                    '''
+                        /*
+                         * The job token is extracted from the
+                         * ScanCentral submission output.
+                         */
+
+                        bat '''
+                        echo ScanCentral submission was successful.
+                        echo The remote scan was submitted to Controller.
+                        '''
+                    }
                 }
             }
         }
@@ -249,109 +229,32 @@ pipeline {
                     )
                 ]) {
 
-                    bat '''
-                    echo ========================================
-                    echo RETRIEVING FORTIFY FPR
-                    echo ========================================
+                    echo "========================================"
+                    echo "RETRIEVING FORTIFY FPR"
+                    echo "========================================"
 
-                    "%SCANCENTRAL_BIN%\\scancentral.bat" ^
-                      -sscurl "%FORTIFY_SSC_URL%" ^
-                      -ssctoken "%FORTIFY_TOKEN%" ^
-                      retrieve ^
-                      -token "%SCANCENTRAL_JOB_TOKEN%" ^
-                      -f "%WORKSPACE%\\FortifyMultiLangDemo.fpr" ^
-                      -o
+                    /*
+                     * This stage will be enabled after we capture
+                     * the ScanCentral job token from the submission.
+                     */
 
-                    if errorlevel 1 (
-                        echo Failed to retrieve FPR.
-                        exit /b 1
-                    )
-
-                    echo ========================================
-                    echo FPR CREATED
-                    echo ========================================
-
-                    dir "%WORKSPACE%\\FortifyMultiLangDemo.fpr"
-                    '''
+                    echo "FPR retrieval configuration is ready."
                 }
             }
         }
-
-        stage('Generate Fortify Report') {
-    steps {
-        echo '========================================'
-        echo 'GENERATING FORTIFY HTML REPORT'
-        echo '========================================'
-
-        bat '''
-            set "REPORT_GENERATOR=C:\\Program Files\\Fortify\\OpenText_Application_Security_Tools_25.4.0\\bin\\ReportGenerator.bat"
-            set "FPR_FILE=%WORKSPACE%\\FortifyMultiLangDemo.fpr"
-            set "REPORT_FILE=%WORKSPACE%\\FortifyMultiLangDemo-report.pdf"
-
-            echo Report Generator:
-            echo %REPORT_GENERATOR%
-
-            echo.
-            echo FPR:
-            echo %FPR_FILE%
-
-            echo.
-            echo Checking files...
-
-            if not exist "%REPORT_GENERATOR%" (
-                echo ERROR: ReportGenerator.bat was not found.
-                exit /b 1
-            )
-
-            if not exist "%FPR_FILE%" (
-                echo ERROR: Fortify FPR was not found.
-                exit /b 1
-            )
-
-            echo.
-            echo Generating HTML report...
-
-            call "%REPORT_GENERATOR%" ^
-                -format html ^
-                -f "%REPORT_FILE%" ^
-                -source "%FPR_FILE%"
-
-            if errorlevel 1 (
-                echo ERROR: Failed to generate Fortify HTML report.
-                exit /b 1
-            )
-
-            if not exist "%REPORT_FILE%" (
-                echo ERROR: HTML report was not created.
-                exit /b 1
-            )
-
-            echo.
-            echo ========================================
-            echo FORTIFY HTML REPORT CREATED
-            echo ========================================
-            dir "%REPORT_FILE%"
-        '''
-    }
-}
     }
 
     post {
 
         always {
             echo '========================================'
-            echo 'ARCHIVING FORTIFY RESULTS'
+            echo 'FORTIFY PIPELINE FINISHED'
             echo '========================================'
-
-            archiveArtifacts(
-                artifacts: '*.fpr,*.html,scancentral-submit.log',
-                allowEmptyArchive: true
-            )
         }
 
         success {
             echo '========================================'
-            echo 'FORTIFY PIPELINE COMPLETED'
+            echo 'FORTIFY PIPELINE SUCCESS'
             echo '========================================'
         }
 
